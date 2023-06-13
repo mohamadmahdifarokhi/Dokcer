@@ -1,0 +1,55 @@
+services:
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:latest
+    networks:
+      - main
+    ports:
+      - "5672:5672"
+    restart: always
+
+  celery_worker:
+    container_name: celery_worker
+    command: celery -A OnlySSH worker --loglevel=info -Q my_queue
+    depends_on:
+      - app
+      - rabbitmq
+    build: .
+    environment:
+      - C_FORCE_ROOT="true"
+    networks:
+      - main
+    restart: always
+
+  celery_beat:
+    container_name: celery_beat
+    command: celery -A OnlySSH beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      - app
+      - rabbitmq
+      - celery_worker
+    build: .
+    networks:
+      - main
+    restart: always
+
+
+  app:
+    build: .
+    command: sh -c "python manage.py migrate && gunicorn OnlySSH.wsgi -b 0.0.0.0:8000"
+    container_name: app
+    volumes:
+      - .:/opt/project
+      - ./db:/opt/project/db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - rabbitmq
+    expose:
+      - "8000"
+    networks:
+      - main
+    restart: always
+
+networks:
+  main:
